@@ -1,0 +1,70 @@
+{
+  "name": "Artist metadata from Kodi-style artist.nfo",
+  "author": "Stephan Wahlen",
+  "version": "1.0.0",
+  "description": "Read artist biographies from Kodi-style artist.nfo files in your libraries",
+  "website": "https://github.com/navidrome/navidrome/tree/master/plugins/examples/local-biography",
+  "permissions": {
+    "library": {
+      "reason": "Read artist.nfo sidecar files",
+      "filesystem": true
+    }
+  },
+  "config": {
+    "schema": {
+      "type": "object",
+      "properties": {
+        "subpaths": {
+          "type": "array",
+          "title": "Artistfolder Subpath",
+          "description": "Optional per-library subpath appended between the library mount point and the artist folder name (e.g. \"Music/Artists\"). Leave empty to use the mount root.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "libraryId": {
+                "type": "integer",
+                "title": "Library ID",
+                "description": "Numeric library ID as shown in Navidrome"
+              },
+              "subpath": {
+                "type": "string",
+                "title": "Subpath",
+                "description": "Subpath under the mount point where artist folders live. Do not include leading or trailing slashes.",
+                "default": ""
+              }
+            },
+            "required": [
+              "libraryId",
+              "subpath"
+            ]
+          }
+        }
+      }
+    },
+    "uiSchema": {
+      "type": "VerticalLayout",
+      "elements": [
+        {
+          "type": "Control",
+          "scope": "#/properties/subpaths",
+          "options": {
+            "elementLabelProp": "libraryName",
+            "detail": {
+              "type": "HorizontalLayout",
+              "elements": [
+                {
+                  "type": "Control",
+                  "scope": "#/properties/libraryId"
+                },
+                {
+                  "type": "Control",
+                  "scope": "#/properties/subpath"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}
