@@ -27,14 +27,14 @@ jobs:
                   sudo dpkg -i tinygo_0.40.1_amd64.deb
                   sudo apt install -y binaryen
 
-            - name: Download dependencies
-              run: go mod download
+            - name: Run tests
+              run: make test
 
-            - name: Build plugin
-              run: make prod
+            - name: Build and package plugin
+              run: make package
 
             - name: Upload artifact
               uses: actions/upload-artifact@v4
               with:
-                  name: artist-nfo-metadata
-                  path: artist-nfo-metadata.ndp
+                  name: discord-rich-presence
+                  path: discord-rich-presence.ndp
