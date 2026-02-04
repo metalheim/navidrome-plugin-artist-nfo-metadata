@@ -1,11 +1,10 @@
 # Artist metadata from Kodi-style artist.nfo (navidrome-plugin)
 A Navidrome plugin that can provide artist metadata to navidrome from Kodi-Style sidecar files ("artist.nfo").
-The following metadata can be read from .nfo files and provided to navidrome
+The following metadata can be read from .nfo files and provided to navidrome by implementing the navidrome `agent` functionalies that are exposed to the plugin.
 - ArtistBiography
 - ArtistImages
 - ArtistURL
 - ArtistMBID
-by implementing the navidrome `agent` functionalies that are exposed to the plugin.
 
 
 > [!NOTE]  
