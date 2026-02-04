@@ -47,7 +47,7 @@ type artistNFO struct {
 }
 
 func (p *plugin) GetArtistBiography(input metadata.ArtistRequest) (*metadata.ArtistBiographyResponse, error) {
-	pdk.Log(pdk.LogInfo, fmt.Sprintf("artist-nfo-metadata: trying to fetch biography for %q from artist.nfo file", input.Name))
+	pdk.Log(pdk.LogDebug, fmt.Sprintf("artist-nfo-metadata: trying to fetch biography for %q from artist.nfo file", input.Name))
 	if strings.TrimSpace(input.Name) == "" {
 		return nil, errors.New("  empty artist name")
 	}
@@ -66,12 +66,12 @@ func (p *plugin) GetArtistBiography(input metadata.ArtistRequest) (*metadata.Art
 		return nil, fmt.Errorf("  biography field is empty in %q", nfoPath)
 	}
 
-	pdk.Log(pdk.LogDebug, fmt.Sprintf("  found artist.nfo at %s. biography: %s", nfoPath, nfo.Biography))
+	pdk.Log(pdk.LogDebug, fmt.Sprintf("  found artist.nfo at %s. biography: %s", nfoPath, strings.TrimSpace(nfo.Biography)))
 	return &metadata.ArtistBiographyResponse{Biography: nfo.Biography}, nil
 }
 
 func (p *plugin) GetArtistURL(input metadata.ArtistRequest) (*metadata.ArtistURLResponse, error) {
-	pdk.Log(pdk.LogInfo, fmt.Sprintf("artist-nfo-metadata: trying to fetch MusicBrainz URL for %q from artist.nfo file", input.Name))
+	pdk.Log(pdk.LogDebug, fmt.Sprintf("artist-nfo-metadata: trying to fetch MusicBrainz URL for %q from artist.nfo file", input.Name))
 	if strings.TrimSpace(input.Name) == "" {
 		return nil, errors.New("  empty artist name")
 	}
@@ -100,7 +100,7 @@ func (p *plugin) GetArtistURL(input metadata.ArtistRequest) (*metadata.ArtistURL
 }
 
 func (p *plugin) GetArtistMBID(input metadata.ArtistMBIDRequest) (*metadata.ArtistMBIDResponse, error) {
-	pdk.Log(pdk.LogInfo, fmt.Sprintf("artist-nfo-metadata: trying to fetch MBID for %q from artist.nfo file", input.Name))
+	pdk.Log(pdk.LogDebug, fmt.Sprintf("artist-nfo-metadata: trying to fetch MBID for %q from artist.nfo file", input.Name))
 	if strings.TrimSpace(input.Name) == "" {
 		return nil, errors.New("  empty artist name")
 	}
@@ -128,7 +128,7 @@ func (p *plugin) GetArtistMBID(input metadata.ArtistMBIDRequest) (*metadata.Arti
 }
 
 func (p *plugin) GetArtistImages(input metadata.ArtistRequest) (*metadata.ArtistImagesResponse, error) {
-	pdk.Log(pdk.LogInfo, fmt.Sprintf("artist-nfo-metadata: trying to fetch artist images for %q from Kodi-style .nfo files", input.Name))
+	pdk.Log(pdk.LogDebug, fmt.Sprintf("artist-nfo-metadata: trying to fetch artist images for %q from Kodi-style .nfo files", input.Name))
 	if strings.TrimSpace(input.Name) == "" {
 		return nil, errors.New("  empty artist name")
 	}
