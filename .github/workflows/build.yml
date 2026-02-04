@@ -1,0 +1,40 @@
+name: Build
+
+on:
+    pull_request:
+        branches:
+            - main
+    push:
+        branches:
+            - main
+
+jobs:
+    build:
+        name: Build
+        runs-on: ubuntu-latest
+        steps:
+            - name: Check out code
+              uses: actions/checkout@v5
+
+            - name: Set up Go
+              uses: actions/setup-go@v5
+              with:
+                  go-version-file: go.mod
+
+            - name: Install TinyGo
+              run: |
+                  wget https://github.com/tinygo-org/tinygo/releases/download/v0.40.1/tinygo_0.40.1_amd64.deb
+                  sudo dpkg -i tinygo_0.40.1_amd64.deb
+                  sudo apt install -y binaryen
+
+            - name: Download dependencies
+              run: go mod download
+
+            - name: Build plugin
+              run: make prod
+
+            - name: Upload artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: artist-nfo-metadata
+                  path: artist-nfo-metadata.ndp

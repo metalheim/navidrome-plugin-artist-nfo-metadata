@@ -1,0 +1,41 @@
+name: Release
+
+on:
+    push:
+        tags:
+            - "v*"
+
+permissions:
+    contents: write
+
+jobs:
+    release:
+        name: Release
+        runs-on: ubuntu-latest
+        steps:
+            - name: Check out code
+              uses: actions/checkout@v5
+
+            - name: Set up Go
+              uses: actions/setup-go@v5
+              with:
+                  go-version-file: go.mod
+
+            - name: Install TinyGo
+              run: |
+                  wget https://github.com/tinygo-org/tinygo/releases/download/v0.40.1/tinygo_0.40.1_amd64.deb
+                  sudo dpkg -i tinygo_0.40.1_amd64.deb
+                  sudo apt install -y binaryen
+
+            - name: Run tests
+              run: make test
+
+            - name: Build and package plugin
+              run: make package
+
+            - name: Create release
+              uses: softprops/action-gh-release@v2
+              with:
+                  draft: true
+                  files: artist-nfo-metadata.ndp
+                  generate_release_notes: true
