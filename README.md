@@ -28,7 +28,7 @@ Navidrome mounts each library at `/libraries/<id>` inside the plugin.
 
 ```bash
 tinygo build -o plugin.wasm -target wasip1 -buildmode=c-shared .
-zip -j local-biography.ndp manifest.json plugin.wasm
+zip -j artist-nfo-metadata.ndp manifest.json plugin.wasm
 ```
 
 ## File Format
