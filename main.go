@@ -47,119 +47,114 @@ type artistNFO struct {
 }
 
 func (p *plugin) GetArtistBiography(input metadata.ArtistRequest) (*metadata.ArtistBiographyResponse, error) {
+	pdk.Log(pdk.LogInfo, fmt.Sprintf("artist-nfo-metadata: trying to fetch biography for %q from artist.nfo file", input.Name))
 	if strings.TrimSpace(input.Name) == "" {
-		return nil, errors.New("not found: empty artist name")
+		return nil, errors.New("  empty artist name")
 	}
-	pdk.Log(pdk.LogDebug, fmt.Sprintf("artist-nfo-metadata: trying to fetch biography for %q from Kodi-style .nfo files", input.Name))
 
 	nfoPath, err := findNFO(input.Name)
 	if err != nil {
-		return nil, fmt.Errorf("not found: biography sidecar not found for artist %q", input.Name)
+		return nil, fmt.Errorf("  artist.nfo file not found for artist %q", input.Name)
 	}
 
 	nfo, ok := readArtistNFO(nfoPath)
 	if !ok {
-		return nil, fmt.Errorf("not found: biography sidecar not found for artist %q", input.Name)
+		return nil, fmt.Errorf("  artist.nfo file couldn't be read at %q", nfoPath)
 	}
 
-	if strings.TrimSpace(a.Biography) == "" {
-		return nil, fmt.Errorf("not found: biography is empty for artist %q", input.Name)
+	if strings.TrimSpace(nfo.Biography) == "" {
+		return nil, fmt.Errorf("  biography field is empty in %q", nfoPath)
 	}
 
-	pdk.Log(pdk.LogDebug, fmt.Sprintf("artist-nfo-metadata: found artist.nfo at %s. biography: %q", nfoPath, a.Biography))
+	pdk.Log(pdk.LogDebug, fmt.Sprintf("  found artist.nfo at %s. biography: %s", nfoPath, nfo.Biography))
 	return &metadata.ArtistBiographyResponse{Biography: nfo.Biography}, nil
 }
 
 func (p *plugin) GetArtistURL(input metadata.ArtistRequest) (*metadata.ArtistURLResponse, error) {
+	pdk.Log(pdk.LogInfo, fmt.Sprintf("artist-nfo-metadata: trying to fetch MusicBrainz URL for %q from artist.nfo file", input.Name))
 	if strings.TrimSpace(input.Name) == "" {
-		return nil, errors.New("not found: empty artist name")
+		return nil, errors.New("  empty artist name")
 	}
-	pdk.Log(pdk.LogDebug, fmt.Sprintf("artist-nfo-metadata: trying to fetch MusicBrainz URL for %q from Kodi-style .nfo files", input.Name))
 
 	nfoPath, err := findNFO(input.Name)
 	if err != nil {
-		return nil, fmt.Errorf("not found: musicbrainz artist id not found for artist %q", input.Name)
+		return nil, fmt.Errorf("  artist.nfo file not found for artist %q", input.Name)
 	}
 
 	nfo, ok := readArtistNFO(nfoPath)
 	if !ok {
-		return nil, fmt.Errorf("not found: musicbrainz artist id not found for artist %q", input.Name)
+		return nil, fmt.Errorf("  artist.nfo file couldn't be read at %q", nfoPath)
 	}
 
 	mbid := strings.TrimSpace(nfo.MusicBrainzArtistID)
 	if mbid == "" {
-		return nil, fmt.Errorf("not found: musicbrainz artist id not found for artist %q", input.Name)
+		return nil, fmt.Errorf("  musicbrainz artist id not found in %q", nfoPath)
 	}
 	if _, err := uuid.Parse(mbid); err != nil {
-		return nil, fmt.Errorf("artist-nfo-metadata: invalid MBID in %s: %q%q", input.Name)
+		return nil, fmt.Errorf("  MBID found but invalid %q", mbid)
 	}
 
 	urlStr := "https://musicbrainz.org/artist/" + mbid
-	pdk.Log(pdk.LogDebug, fmt.Sprintf("artist-nfo-metadata: found MBID %s in %s; returning URL %s", mbid, nfoPath, urlStr))
+	pdk.Log(pdk.LogDebug, fmt.Sprintf("  found MBID %s in %s; returning URL %s", mbid, nfoPath, urlStr))
 	return &metadata.ArtistURLResponse{URL: urlStr}, nil
 }
 
 func (p *plugin) GetArtistMBID(input metadata.ArtistMBIDRequest) (*metadata.ArtistMBIDResponse, error) {
-	artistName := input.Name
-	if strings.TrimSpace(artistName) == "" {
-		return nil, errors.New("not found: empty artist name/id")
+	pdk.Log(pdk.LogInfo, fmt.Sprintf("artist-nfo-metadata: trying to fetch MBID for %q from artist.nfo file", input.Name))
+	if strings.TrimSpace(input.Name) == "" {
+		return nil, errors.New("  empty artist name")
 	}
-	pdk.Log(pdk.LogDebug, fmt.Sprintf("artist-nfo-metadata: trying to fetch MBID for %q from Kodi-style .nfo files", artistName))
 
-	nfoPath, err := findNFO(artistName)
+	nfoPath, err := findNFO(input.Name)
 	if err != nil {
-		return nil, fmt.Errorf("not found: musicbrainz artist id not found for artist %q", artistName)
+		return nil, fmt.Errorf("  artist.nfo file not found for artist %q", input.Name)
 	}
 
 	nfo, ok := readArtistNFO(nfoPath)
 	if !ok {
-		return nil, fmt.Errorf("not found: musicbrainz artist id not found for artist %q", artistName)
+		return nil, fmt.Errorf("  artist.nfo file couldn't be read at %q", nfoPath)
 	}
 
 	mbid := strings.TrimSpace(nfo.MusicBrainzArtistID)
 	if mbid == "" {
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("artist-nfo-metadata: no MBID in %s", nfoPath))
-		return nil, fmt.Errorf("not found: musicbrainz artist id not found for artist %q", artistName)
+		return nil, fmt.Errorf("  musicbrainz artist id not found in %q", nfoPath)
 	}
 	if _, err := uuid.Parse(mbid); err != nil {
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("artist-nfo-metadata: invalid MBID in %s: %q", nfoPath, mbid))
-		return nil, fmt.Errorf("not found: musicbrainz artist id not found for artist %q", artistName)
+		return nil, fmt.Errorf("  MBID found but invalid %q", mbid)
 	}
 
-	pdk.Log(pdk.LogDebug, fmt.Sprintf("artist-nfo-metadata: returning MBID %s for %q (from %s)", mbid, artistName, nfoPath))
+	pdk.Log(pdk.LogDebug, fmt.Sprintf("  returning MBID %s for %s", mbid, input.Name, nfoPath))
 	return &metadata.ArtistMBIDResponse{MBID: mbid}, nil
 }
 
 func (p *plugin) GetArtistImages(input metadata.ArtistRequest) (*metadata.ArtistImagesResponse, error) {
+	pdk.Log(pdk.LogInfo, fmt.Sprintf("artist-nfo-metadata: trying to fetch artist images for %q from Kodi-style .nfo files", input.Name))
 	if strings.TrimSpace(input.Name) == "" {
-		return nil, errors.New("not found: empty artist name")
+		return nil, errors.New("  empty artist name")
 	}
-	pdk.Log(pdk.LogDebug, fmt.Sprintf("artist-nfo-metadata: trying to fetch artist images for %q from Kodi-style .nfo files", input.Name))
 
 	nfoPath, err := findNFO(input.Name)
 	if err != nil {
-		return nil, fmt.Errorf("not found: no images for artist %q", input.Name)
+		return nil, fmt.Errorf("  artist.nfo file not found for artist %q", input.Name)
 	}
 
 	nfo, ok := readArtistNFO(nfoPath)
 	if !ok {
-		return nil, fmt.Errorf("not found: no images for artist %q", input.Name)
+		return nil, fmt.Errorf("  artist.nfo file couldn't be read at %q", nfoPath)
 	}
 
 	thumb := strings.TrimSpace(nfo.Thumb)
 	if thumb == "" {
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("artist-nfo-metadata: no thumb tag in %s", nfoPath))
-		return nil, fmt.Errorf("not found: no images for artist %q", input.Name)
+		return nil, fmt.Errorf("  no thumb tag in %q", nfoPath)
 	}
 
 	// Validate URL (require http(s) and host)
 	u, err := url.Parse(thumb)
 	if err != nil || u.Scheme == "" || u.Host == "" {
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("artist-nfo-metadata: invalid thumb URL in %s: %q", nfoPath, thumb))
-		return nil, fmt.Errorf("not found: invalid image url for artist %q", input.Name)
+		return nil, fmt.Errorf("  invalid image url for artist %q", input.Name)
 	}
 
-	pdk.Log(pdk.LogDebug, fmt.Sprintf("artist-nfo-metadata: returning image %s from %s", thumb, nfoPath))
+	pdk.Log(pdk.LogDebug, fmt.Sprintf("  returning image %s from %s", thumb, nfoPath))
 	return &metadata.ArtistImagesResponse{
 		Images: []metadata.ImageInfo{
 			{URL: thumb, Size: 0},
@@ -173,10 +168,10 @@ func (p *plugin) GetArtistImages(input metadata.ArtistRequest) (*metadata.Artist
 func findNFO(artistName string) (string, error) {
 	libraries, err := host.LibraryGetAllLibraries()
 	if err != nil {
-		return "", fmt.Errorf("failed to get libraries: %w", err)
+		return "", fmt.Errorf("  failed to get libraries: %w", err)
 	}
 	if len(libraries) == 0 {
-		return "", errors.New("no libraries available")
+		return "", errors.New("  no libraries available")
 	}
 
 	subpathMap := loadSubpathConfig()
@@ -198,7 +193,7 @@ func findNFO(artistName string) (string, error) {
 			nfoPath = filepath.Join(lib.MountPoint, subpath, artistName, "artist.nfo")
 		}
 
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("artist-nfo-metadata: checking exact path: %s (library ID=%d)", nfoPath, lib.ID))
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("  checking exact path: %s", nfoPath))
 
 		// Check existence quickly before attempting to read/parse
 		if fi, err := os.Stat(nfoPath); err == nil && !fi.IsDir() {
@@ -214,12 +209,12 @@ func readArtistNFO(nfoPath string) (artistNFO, bool) {
 	var empty artistNFO
 	data, err := os.ReadFile(nfoPath)
 	if err != nil {
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("artist-nfo-metadata: failed to read %s: %v", nfoPath, err))
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("  failed to read %s: %v", nfoPath, err))
 		return empty, false
 	}
 	a, err := parseArtistFromNFO(data)
 	if err != nil {
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("artist-nfo-metadata: failed to parse %s: %v", nfoPath, err))
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("  failed to parse %s: %v", nfoPath, err))
 		return empty, false
 	}
 	return a, true
@@ -253,7 +248,7 @@ func parseArtistFromNFO(data []byte) (artistNFO, error) {
 			continue
 		}
 		if err := xml.Unmarshal(decoded, &a); err == nil {
-			pdk.Log(pdk.LogDebug, fmt.Sprintf("artist-nfo-metadata: parsed artist.nfo using %s decoder", d.name))
+			pdk.Log(pdk.LogDebug, fmt.Sprintf("  parsed artist.nfo using %s decoder", d.name))
 			return a, nil
 		}
 	}
@@ -261,11 +256,11 @@ func parseArtistFromNFO(data []byte) (artistNFO, error) {
 	// Final fallback: convert bytes to string (invalid UTF-8 will be replaced)
 	// and try again. This may lose/replace invalid runes but often succeeds.
 	if err := xml.Unmarshal([]byte(string(data)), &a); err == nil {
-		pdk.Log(pdk.LogDebug, "artist-nfo-metadata: parsed artist.nfo using fallback string conversion")
+		pdk.Log(pdk.LogDebug, "  parsed artist.nfo using fallback string conversion")
 		return a, nil
 	}
 
-	return a, fmt.Errorf("xml unmarshal failed for artist.nfo (attempted UTF-8, windows-1252, iso-8859-1, and fallback)")
+	return a, fmt.Errorf("  xml unmarshal failed for artist.nfo (attempted UTF-8, windows-1252, iso-8859-1, and fallback)")
 }
 
 // loadSubpathConfig reads pdk config key "subpaths" and returns a map[libraryId]subpath.
@@ -279,7 +274,7 @@ func loadSubpathConfig() map[int]string {
 
 	var entries []subpathConfigEntry
 	if err := json.Unmarshal([]byte(cfgStr), &entries); err != nil {
-		pdk.Log(pdk.LogWarn, fmt.Sprintf("artist-nfo-metadata: failed to parse subpaths config: %v", err))
+		pdk.Log(pdk.LogWarn, fmt.Sprintf("  failed to parse subpaths config: %v", err))
 		return result
 	}
 
