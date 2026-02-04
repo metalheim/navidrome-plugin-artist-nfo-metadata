@@ -123,7 +123,7 @@ func (p *plugin) GetArtistMBID(input metadata.ArtistMBIDRequest) (*metadata.Arti
 		return nil, fmt.Errorf("  MBID found but invalid %q", mbid)
 	}
 
-	pdk.Log(pdk.LogDebug, fmt.Sprintf("  returning MBID %s for %s", mbid, input.Name, nfoPath))
+	pdk.Log(pdk.LogDebug, fmt.Sprintf("  returning MBID %s for %s", mbid, input.Name))
 	return &metadata.ArtistMBIDResponse{MBID: mbid}, nil
 }
 
