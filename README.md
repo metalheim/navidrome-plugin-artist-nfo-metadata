@@ -8,7 +8,7 @@ The following metadata can be read from .nfo files and provided to navidrome by 
 
 
 > [!NOTE]  
-> The plugin checks `<library_mount>/<optional_subpath>/<artistname>/artist.nfo` exactly. 
+> The plugin checks `<mountPoint>[/subpath]/<artistName>/artist.nfo` exactly. 
 > If your artistfolder doesn't match the artist name exactly, it will fail to deliver results.
 > If you have multiple libraries, it searches all mounted libraries and returns the first match.
 

@@ -18,7 +18,6 @@ import (
 	"golang.org/x/text/encoding/charmap"
 )
 
-// Ensure our plugin implements the required providers
 var (
 	_ metadata.ArtistBiographyProvider = (*plugin)(nil)
 	_ metadata.ArtistURLProvider       = (*plugin)(nil)
@@ -29,12 +28,9 @@ var (
 type plugin struct{}
 
 func init() {
-	// Register the plugin implementation with the MetadataAgent capability
 	metadata.Register(&plugin{})
 }
 
-// subpathConfigEntry mirrors the manifest config for a single entry.
-// We only care about libraryId and subpath here.
 type subpathConfigEntry struct {
 	LibraryId int    `json:"libraryId"`
 	Subpath   string `json:"subpath"`
@@ -50,7 +46,6 @@ type artistNFO struct {
 	Outline             string   `xml:"outline"`
 }
 
-// GetArtistBiography returns the biography text from <artist>/artist.
 func (p *plugin) GetArtistBiography(input metadata.ArtistRequest) (*metadata.ArtistBiographyResponse, error) {
 	if strings.TrimSpace(input.Name) == "" {
 		return nil, errors.New("not found: empty artist name")
@@ -75,7 +70,6 @@ func (p *plugin) GetArtistBiography(input metadata.ArtistRequest) (*metadata.Art
 	return &metadata.ArtistBiographyResponse{Biography: nfo.Biography}, nil
 }
 
-// GetArtistURL returns a MusicBrainz URL when artist.nfo contains a valid musicbrainzartistid UUID.
 func (p *plugin) GetArtistURL(input metadata.ArtistRequest) (*metadata.ArtistURLResponse, error) {
 	if strings.TrimSpace(input.Name) == "" {
 		return nil, errors.New("not found: empty artist name")
@@ -105,7 +99,6 @@ func (p *plugin) GetArtistURL(input metadata.ArtistRequest) (*metadata.ArtistURL
 	return &metadata.ArtistURLResponse{URL: urlStr}, nil
 }
 
-// GetArtistMBID returns the MusicBrainz artist ID from artist.nfo if present and valid.
 func (p *plugin) GetArtistMBID(input metadata.ArtistMBIDRequest) (*metadata.ArtistMBIDResponse, error) {
 	artistName := input.Name
 	if strings.TrimSpace(artistName) == "" {
@@ -137,7 +130,6 @@ func (p *plugin) GetArtistMBID(input metadata.ArtistMBIDRequest) (*metadata.Arti
 	return &metadata.ArtistMBIDResponse{MBID: mbid}, nil
 }
 
-// GetArtistImages returns an image list if artist.nfo contains a thumb URL.
 func (p *plugin) GetArtistImages(input metadata.ArtistRequest) (*metadata.ArtistImagesResponse, error) {
 	if strings.TrimSpace(input.Name) == "" {
 		return nil, errors.New("not found: empty artist name")
@@ -191,7 +183,6 @@ func findNFO(artistName string) (string, error) {
 
 	for _, lib := range libraries {
 		if lib.MountPoint == "" {
-			// Filesystem access not enabled for this library
 			continue
 		}
 
@@ -213,7 +204,6 @@ func findNFO(artistName string) (string, error) {
 		if fi, err := os.Stat(nfoPath); err == nil && !fi.IsDir() {
 			return nfoPath, nil
 		}
-		// otherwise continue searching other libraries
 	}
 
 	return "", os.ErrNotExist
