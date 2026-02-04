@@ -7,6 +7,12 @@ The following metadata can be read from .nfo files and provided to navidrome
 - ArtistMBID
 by implementing the navidrome `agent` functionalies that are exposed to the plugin.
 
+
+> [!NOTE]  
+> The plugin checks `<library_mount>/<artistname>/artist.nfo` exactly. 
+> If your artistfolder doesn't match the artist name exactly, it will fail to deliver results.
+- If you have multiple libraries, it searches all mounted libraries and returns the first match.
+
 ## Configure Navidrome
 
 ```toml
@@ -24,14 +30,10 @@ The Plugin will attempt to read an .nfo file in each library that is made availa
 Navidrome mounts each library at `/libraries/<id>` inside the plugin.
 
 
-## Build
-
-```bash
-tinygo build -o plugin.wasm -target wasip1 -buildmode=c-shared .
-zip -j artist-nfo-metadata.ndp manifest.json plugin.wasm
-```
-
 ## File Format
+
+> [!TIP]
+>Plugin expects Kodi-Style xml files with `.nfo` extension. See here for details: https://kodi.wiki/view/NFO_files/Artists
 
 Example `artist.nfo`:
 
@@ -45,8 +47,9 @@ Example `artist.nfo`:
 </artist>
 ```
 
-## Notes
+## Build
 
-- The plugin first checks `<mount>/<artistname>/artist.nfo` exactly; if not present, it scans the library root for a directory matching the artist name case-insensitively.
-- If you have multiple libraries, it searches all mounted libraries and returns the first match.
-- Future improvements: configurable base path(s), alternative name normalization (spaces vs underscores), and optional recursive search.
+```bash
+tinygo build -o plugin.wasm -target wasip1 -buildmode=c-shared .
+zip -j artist-nfo-metadata.ndp manifest.json plugin.wasm
+```
