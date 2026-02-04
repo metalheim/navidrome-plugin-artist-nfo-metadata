@@ -14,6 +14,7 @@ If you have multiple libraries, it searches all mounted libraries and returns th
 > [!NOTE]  
 > if you're a KODI user and use a seperate [Artist information folder](https://kodi.wiki/view/Artist_information_folder), this must be inside a library to be compatible with this plugin
 > f.e. if your Artist information folder is a folder called `ArtistInfoKodi` inside your library 1, then set the following configuration:
+> go to Navidrome -> Plugins -> artist-nfo-metadata -> Configuration -> Artistfolder Subpath -> Click `+`
 > ![Screenshot of an example configuration for KODI users](screenshots/configuration-example.png)
 
 ## Configure Navidrome
