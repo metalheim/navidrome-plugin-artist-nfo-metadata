@@ -8,9 +8,9 @@ The following metadata can be read from .nfo files and provided to navidrome by 
 
 
 > [!NOTE]  
-> The plugin checks `<library_mount>/<artistname>/artist.nfo` exactly. 
+> The plugin checks `<library_mount>/<optional_subpath>/<artistname>/artist.nfo` exactly. 
 > If your artistfolder doesn't match the artist name exactly, it will fail to deliver results.
-- If you have multiple libraries, it searches all mounted libraries and returns the first match.
+> If you have multiple libraries, it searches all mounted libraries and returns the first match.
 
 ## Configure Navidrome
 
@@ -25,9 +25,6 @@ Agents = "artist-nfo-metadata,lastfm,deezer,spotify"
 The plugin requires the `library` permission to read .nfo files from disk.
 Please select which libraries the plugin is allowed to access in the Navidrome UI.
 The Plugin will attempt to read an .nfo file in each library that is made available to it.
-
-Navidrome mounts each library at `/libraries/<id>` inside the plugin.
-
 
 ## File Format
 
