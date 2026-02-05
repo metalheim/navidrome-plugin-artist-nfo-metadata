@@ -186,22 +186,51 @@ func findNFO(artistName string) (string, error) {
 			subpath = strings.Trim(v, "/")
 		}
 
-		var nfoPath string
-		if subpath == "" {
-			nfoPath = filepath.Join(lib.MountPoint, artistName, "artist.nfo")
-		} else {
-			nfoPath = filepath.Join(lib.MountPoint, subpath, artistName, "artist.nfo")
-		}
+		nfoPath := filepath.Join(lib.MountPoint, subpath, artistName, "artist.nfo")
 
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("  checking exact path: %s", nfoPath))
-
-		// Check existence quickly before attempting to read/parse
+		// Check exact match first
 		if fi, err := os.Stat(nfoPath); err == nil && !fi.IsDir() {
+			pdk.Log(pdk.LogDebug, fmt.Sprintf("  nfo found at (exact): %s", nfoPath))
 			return nfoPath, nil
 		}
+
+		// Probe parent dir for subfolders (case-insensitive search)
+		parent := filepath.Join(lib.MountPoint, subpath)
+		artistDir, ok := findMatchingDir(parent, artistName)
+		if !ok {
+			// not found in this library, continue to next lib
+			continue
+		}
+
+		nfoPath = filepath.Join(artistDir, "artist.nfo")
+		if fi, err := os.Stat(nfoPath); err == nil && !fi.IsDir() {
+			pdk.Log(pdk.LogDebug, fmt.Sprintf("  nfo found at (case-insensitive): %s", nfoPath))
+			return nfoPath, nil
+		}
+
+		// If artistDir matched but artist.nfo doesn't exist, continue to next lib
+		continue
 	}
 
 	return "", os.ErrNotExist
+}
+
+// findMatchingDir returns the actual directory path under parent whose name
+// matches wantedName case-insensitively. If none found, returns ("", false).
+func findMatchingDir(parent, wantedName string) (string, bool) {
+	entries, err := os.ReadDir(parent)
+	if err != nil {
+		return "", false
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		if strings.EqualFold(e.Name(), wantedName) {
+			return filepath.Join(parent, e.Name()), true
+		}
+	}
+	return "", false
 }
 
 // readArtistNFO parses the artist.nfo and returns the artistNFO struct.

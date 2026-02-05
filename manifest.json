@@ -1,7 +1,7 @@
 {
   "name": "Artist metadata from Kodi-style artist.nfo",
   "author": "Stephan Wahlen",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Read artist biographies from Kodi-style artist.nfo files in your libraries",
   "website": "https://github.com/navidrome/navidrome/tree/master/plugins/examples/local-biography",
   "permissions": {
