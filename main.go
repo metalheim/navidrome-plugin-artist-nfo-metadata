@@ -209,7 +209,8 @@ func findNFO(artistName string) (string, error) {
 		}
 
 		nfoPath := filepath.Join(lib.MountPoint, subpath, artistName, "artist.nfo")
-
+		
+		pdk.Log(pdk.LogTrace, fmt.Sprintf("  Probing nfo at: %s", nfoPath))
 		// Check exact match first
 		if fi, err := os.Stat(nfoPath); err == nil && !fi.IsDir() {
 			pdk.Log(pdk.LogDebug, fmt.Sprintf("  nfo found at (exact): %s", nfoPath))
@@ -221,11 +222,12 @@ func findNFO(artistName string) (string, error) {
 		artistDir, ok := findMatchingDir(parent, artistName)
 		if !ok {
 			// not found in this library, continue to next lib
-			pdk.Log(pdk.LogDebug, fmt.Sprintf("  no case-insensitive artist dir match under %q for %q (library %d)", parent, artistName, lib.ID))
+			pdk.Log(pdk.LogDebug, fmt.Sprintf("  couldn't find artist dir '%q' in %q", artistName, parent))
 			continue
 		}
 
 		nfoPath = filepath.Join(artistDir, "artist.nfo")
+		pdk.Log(pdk.LogTrace, fmt.Sprintf("  Probing nfo at: %s", nfoPath))
 		if fi, err := os.Stat(nfoPath); err == nil && !fi.IsDir() {
 			pdk.Log(pdk.LogDebug, fmt.Sprintf("  nfo found at (case-insensitive): %s", nfoPath))
 			return nfoPath, nil
