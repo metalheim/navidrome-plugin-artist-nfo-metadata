@@ -222,14 +222,14 @@ func findNFO(artistName string) (string, error) {
 		artistDir, ok := findMatchingDir(parent, artistName)
 		if !ok {
 			// not found in this library, continue to next lib
-			pdk.Log(pdk.LogDebug, fmt.Sprintf("  couldn't find artist dir '%q' in %q", artistName, parent))
+			pdk.Log(pdk.LogDebug, fmt.Sprintf("  couldn't find artist dir %q in %q", artistName, parent))
 			continue
 		}
 
 		nfoPath = filepath.Join(artistDir, "artist.nfo")
 		pdk.Log(pdk.LogTrace, fmt.Sprintf("  Probing nfo at: %s", nfoPath))
 		if fi, err := os.Stat(nfoPath); err == nil && !fi.IsDir() {
-			pdk.Log(pdk.LogDebug, fmt.Sprintf("  nfo found at (case-insensitive): %s", nfoPath))
+			pdk.Log(pdk.LogDebug, fmt.Sprintf("  artist.nfo found at (case-insensitive): %s", nfoPath))
 			return nfoPath, nil
 		}
 
@@ -238,7 +238,6 @@ func findNFO(artistName string) (string, error) {
 		continue
 	}
 
-	pdk.Log(pdk.LogDebug, fmt.Sprintf("  artist.nfo not found in any library for %q", artistName))
 	return "", os.ErrNotExist
 }
 
