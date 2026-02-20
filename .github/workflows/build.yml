@@ -36,5 +36,5 @@ jobs:
             - name: Upload artifact
               uses: actions/upload-artifact@v4
               with:
-                  name: discord-rich-presence
-                  path: discord-rich-presence.ndp
+                  name: artist-nfo-metadata
+                  path: artist-nfo-metadata.ndp
