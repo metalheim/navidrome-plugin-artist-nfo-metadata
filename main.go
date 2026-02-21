@@ -214,8 +214,11 @@ func findNFO(artistName string) (string, error) {
 		if fi, err := os.Stat(nfoPath); err == nil && !fi.IsDir() {
 			pdk.Log(pdk.LogDebug, fmt.Sprintf("  artist.nfo found at (exact): %s", nfoPath))
 			return nfoPath, nil
-		}else{
-			pdk.Log(pdk.LogTrace, fmt.Sprintf("  Couldn't find artist.nfo at: %s, trying case-insensitive match next", nfoPath))
+		}else if err != nil {
+			// This is the key diagnostic: why did stat fail?
+			pdk.Log(pdk.LogDebug, fmt.Sprintf("  stat failed for %s: %v", nfoPath, err))
+		} else if fi != nil && fi.IsDir() {
+			pdk.Log(pdk.LogDebug, fmt.Sprintf("  path exists but is a directory (expected file): %q", nfoPath))
 		}
 
 		// Probe parent dir for subfolders (case-insensitive search)
