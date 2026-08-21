@@ -18,6 +18,8 @@ import (
 	"golang.org/x/text/encoding/charmap"
 )
 
+// Returning nil, nil tells Navidrome there is no data for this artist. An error means this
+// plugin failed, and Navidrome retries it with backoff.
 var (
 	_ metadata.ArtistBiographyProvider = (*plugin)(nil)
 	_ metadata.ArtistURLProvider       = (*plugin)(nil)
@@ -50,24 +52,27 @@ func (p *plugin) GetArtistBiography(input metadata.ArtistRequest) (*metadata.Art
 	pdk.Log(pdk.LogDebug, fmt.Sprintf("artist-nfo-metadata: trying to fetch biography for %q from artist.nfo file", input.Name))
 	if strings.TrimSpace(input.Name) == "" {
 		pdk.Log(pdk.LogDebug, "  empty artist name")
-		return nil, errors.New("  empty artist name")
+		return nil, nil
 	}
 
 	nfoPath, err := findNFO(input.Name)
+	if errors.Is(err, os.ErrNotExist) {
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("  artist.nfo file not found for artist %s", input.Name))
+		return nil, nil
+	}
 	if err != nil {
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("  artist.nfo file not found for artist %s: %v", input.Name, err))
-		return nil, fmt.Errorf("  artist.nfo file not found for artist %s", input.Name)
+		return nil, err
 	}
 
 	nfo, ok := readArtistNFO(nfoPath)
 	if !ok {
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("  artist.nfo file couldn't be read at %s", nfoPath))
-		return nil, fmt.Errorf("  artist.nfo file couldn't be read at %s", nfoPath)
+		pdk.Log(pdk.LogWarn, fmt.Sprintf("  artist.nfo file couldn't be read at %s", nfoPath))
+		return nil, nil
 	}
 
 	if strings.TrimSpace(nfo.Biography) == "" {
 		pdk.Log(pdk.LogDebug, fmt.Sprintf("  biography field is empty in %s", nfoPath))
-		return nil, fmt.Errorf("  biography field is empty in %s", nfoPath)
+		return nil, nil
 	}
 
 	pdk.Log(pdk.LogDebug, fmt.Sprintf("  found artist.nfo at %s. biography: %s", nfoPath, strings.TrimSpace(nfo.Biography)))
@@ -78,29 +83,32 @@ func (p *plugin) GetArtistURL(input metadata.ArtistRequest) (*metadata.ArtistURL
 	pdk.Log(pdk.LogDebug, fmt.Sprintf("artist-nfo-metadata: trying to fetch MusicBrainz URL for %s from artist.nfo file", input.Name))
 	if strings.TrimSpace(input.Name) == "" {
 		pdk.Log(pdk.LogDebug, "  empty artist name")
-		return nil, errors.New("  empty artist name")
+		return nil, nil
 	}
 
 	nfoPath, err := findNFO(input.Name)
+	if errors.Is(err, os.ErrNotExist) {
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("  artist.nfo file not found for artist %s", input.Name))
+		return nil, nil
+	}
 	if err != nil {
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("  artist.nfo file not found for artist %s: %v", input.Name, err))
-		return nil, fmt.Errorf("  artist.nfo file not found for artist %s", input.Name)
+		return nil, err
 	}
 
 	nfo, ok := readArtistNFO(nfoPath)
 	if !ok {
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("  artist.nfo file couldn't be read at %s", nfoPath))
-		return nil, fmt.Errorf("  artist.nfo file couldn't be read at %s", nfoPath)
+		pdk.Log(pdk.LogWarn, fmt.Sprintf("  artist.nfo file couldn't be read at %s", nfoPath))
+		return nil, nil
 	}
 
 	mbid := strings.TrimSpace(nfo.MusicBrainzArtistID)
 	if mbid == "" {
 		pdk.Log(pdk.LogDebug, fmt.Sprintf("  musicbrainz artist id not found in %s", nfoPath))
-		return nil, fmt.Errorf("  musicbrainz artist id not found in %s", nfoPath)
+		return nil, nil
 	}
 	if _, err := uuid.Parse(mbid); err != nil {
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("  MBID found but invalid %s: %v", mbid, err))
-		return nil, fmt.Errorf("  MBID found but invalid %s", mbid)
+		pdk.Log(pdk.LogWarn, fmt.Sprintf("  MBID found but invalid %s: %v", mbid, err))
+		return nil, nil
 	}
 
 	urlStr := "https://musicbrainz.org/artist/" + mbid
@@ -112,29 +120,32 @@ func (p *plugin) GetArtistMBID(input metadata.ArtistMBIDRequest) (*metadata.Arti
 	pdk.Log(pdk.LogDebug, fmt.Sprintf("artist-nfo-metadata: trying to fetch MBID for %s from artist.nfo file", input.Name))
 	if strings.TrimSpace(input.Name) == "" {
 		pdk.Log(pdk.LogDebug, "  empty artist name")
-		return nil, errors.New("  empty artist name")
+		return nil, nil
 	}
 
 	nfoPath, err := findNFO(input.Name)
+	if errors.Is(err, os.ErrNotExist) {
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("  artist.nfo file not found for artist %s", input.Name))
+		return nil, nil
+	}
 	if err != nil {
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("  artist.nfo file not found for artist %s: %v", input.Name, err))
-		return nil, fmt.Errorf("  artist.nfo file not found for artist %s", input.Name)
+		return nil, err
 	}
 
 	nfo, ok := readArtistNFO(nfoPath)
 	if !ok {
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("  artist.nfo file couldn't be read at %s", nfoPath))
-		return nil, fmt.Errorf("  artist.nfo file couldn't be read at %s", nfoPath)
+		pdk.Log(pdk.LogWarn, fmt.Sprintf("  artist.nfo file couldn't be read at %s", nfoPath))
+		return nil, nil
 	}
 
 	mbid := strings.TrimSpace(nfo.MusicBrainzArtistID)
 	if mbid == "" {
 		pdk.Log(pdk.LogDebug, fmt.Sprintf("  musicbrainz artist id not found in %s", nfoPath))
-		return nil, fmt.Errorf("  musicbrainz artist id not found in %s", nfoPath)
+		return nil, nil
 	}
 	if _, err := uuid.Parse(mbid); err != nil {
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("  MBID found but invalid %s: %v", mbid, err))
-		return nil, fmt.Errorf("  MBID found but invalid %s", mbid)
+		pdk.Log(pdk.LogWarn, fmt.Sprintf("  MBID found but invalid %s: %v", mbid, err))
+		return nil, nil
 	}
 
 	pdk.Log(pdk.LogDebug, fmt.Sprintf("  returning MBID %s for %s", mbid, input.Name))
@@ -145,32 +156,35 @@ func (p *plugin) GetArtistImages(input metadata.ArtistRequest) (*metadata.Artist
 	pdk.Log(pdk.LogDebug, fmt.Sprintf("artist-nfo-metadata: trying to fetch artist images for %s from Kodi-style .nfo files", input.Name))
 	if strings.TrimSpace(input.Name) == "" {
 		pdk.Log(pdk.LogDebug, "  empty artist name")
-		return nil, errors.New("  empty artist name")
+		return nil, nil
 	}
 
 	nfoPath, err := findNFO(input.Name)
+	if errors.Is(err, os.ErrNotExist) {
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("  artist.nfo file not found for artist %s", input.Name))
+		return nil, nil
+	}
 	if err != nil {
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("  artist.nfo file not found for artist %s: %v", input.Name, err))
-		return nil, fmt.Errorf("  artist.nfo file not found for artist %s", input.Name)
+		return nil, err
 	}
 
 	nfo, ok := readArtistNFO(nfoPath)
 	if !ok {
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("  artist.nfo file couldn't be read at %s", nfoPath))
-		return nil, fmt.Errorf("  artist.nfo file couldn't be read at %s", nfoPath)
+		pdk.Log(pdk.LogWarn, fmt.Sprintf("  artist.nfo file couldn't be read at %s", nfoPath))
+		return nil, nil
 	}
 
 	thumb := strings.TrimSpace(nfo.Thumb)
 	if thumb == "" {
 		pdk.Log(pdk.LogDebug, fmt.Sprintf("  no thumb tag in %s", nfoPath))
-		return nil, fmt.Errorf("  no thumb tag in %s", nfoPath)
+		return nil, nil
 	}
 
 	// Validate URL (require http(s) and host)
 	u, err := url.Parse(thumb)
 	if err != nil || u.Scheme == "" || u.Host == "" {
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("  invalid image url in %q for artist %s: %q (parseErr=%v, scheme=%q, host=%q)", nfoPath, input.Name, thumb, err, u.Scheme, u.Host))
-		return nil, fmt.Errorf("  invalid image url for artist %s", input.Name)
+		pdk.Log(pdk.LogWarn, fmt.Sprintf("  invalid image url in %q for artist %s: %q (parseErr=%v)", nfoPath, input.Name, thumb, err))
+		return nil, nil
 	}
 
 	pdk.Log(pdk.LogDebug, fmt.Sprintf("  returning image %s from %s", thumb, nfoPath))
@@ -181,9 +195,9 @@ func (p *plugin) GetArtistImages(input metadata.ArtistRequest) (*metadata.Artist
 	}, nil
 }
 
-// findNFO searches configured libraries and returns the first existing artist.nfo path.
-// It applies the per-library subpath config if present and only checks the exact path:
-// <mountPoint>[/subpath]/<artistName>/artist.nfo
+// findNFO returns the first artist.nfo found across the configured libraries, trying
+// <mountPoint>[/subpath]/<artistName>/artist.nfo and then a case-insensitive match on the artist
+// folder. It returns os.ErrNotExist when no library has one.
 func findNFO(artistName string) (string, error) {
 	libraries, err := host.LibraryGetAllLibraries()
 	if err != nil {
