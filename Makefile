@@ -7,7 +7,7 @@ test:
 	go test -race ./...
 
 build:
-	tinygo build -opt=2 -scheduler=none -no-debug -o $(WASM_FILE) -target wasi -buildmode=c-shared .
+	tinygo build -opt=2 -scheduler=none -no-debug -o $(WASM_FILE) -target wasip1 -buildmode=c-shared .
 
 package: build
 	zip $(PLUGIN_NAME).ndp $(WASM_FILE) manifest.json
