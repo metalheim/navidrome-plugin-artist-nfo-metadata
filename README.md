@@ -8,7 +8,7 @@ The following metadata can be read from .nfo files and provided to navidrome by 
 
 
 The plugin checks `<mountPoint>[/subpath]/<artistName>/artist.nfo`
-artistName is checked case-insensitively. When no folder matches, the filesystem-safe spellings of the name are tried: trailing dots and spaces removed (`Boney M.` -> `Boney M`), the characters `/ \ : * ? " < > |` removed or replaced by `-`, `_`, `+` or a space (`AC/DC` -> `ACDC`, `Doom:vs` -> `Doom-vs`), diacritics stripped (`Mötley Crüe` -> `Motley Crue`), and combinations of these. Nothing else is fuzzy.
+artistName is checked case-insensitively (and independent of Unicode normalisation, so folders created on macOS match). When no folder matches, the filesystem-safe spellings of the name are tried: leading and trailing dots and spaces removed (`Boney M.` -> `Boney M`), the characters `/ \ : * ? " < > |` removed or replaced by `-`, `_`, `+` or a space (`AC/DC` -> `ACDC`, `Doom:vs` -> `Doom-vs`), Lidarr's own folder spelling (`Therapy?` -> `Therapy!`), diacritics stripped (`Mötley Crüe` -> `Motley Crue`), and combinations of these. Nothing else is fuzzy. A folder found through such a spelling is only used when its `artist.nfo` does not say otherwise: a `<name>` in the file must be the artist's name and a `<musicbrainzartistid>` must match the artist's MBID when Navidrome knows it, so `Bôa` does not pick up the file of `BoA`.
 If you have multiple libraries, it searches all mounted libraries and returns the first match.
 
 > [!NOTE]  

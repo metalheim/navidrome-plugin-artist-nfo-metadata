@@ -6,8 +6,10 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/navidrome/navidrome/plugins/pdk/go/host"
 	"github.com/navidrome/navidrome/plugins/pdk/go/pdk"
 	"github.com/stretchr/testify/mock"
+	"golang.org/x/text/unicode/norm"
 )
 
 // allowLogging lets pdk.Log run on the host, where it is a mock that panics
@@ -36,10 +38,15 @@ func TestNameVariants(t *testing.T) {
 		{name: "Blue Öyster Cult", first: "Blue Oyster Cult", wants: []string{"Blue Oyster Cult"}},
 		{name: "Mø", first: "Mo", wants: []string{"Mo"}},
 		{name: "Hüsker Dü", first: "Husker Du", wants: []string{"Husker Du"}},
-		{name: "Sigur Rós: Ágætis byrjun", wants: []string{"Sigur Ros- Agaetis byrjun", "Sigur Ros Agaetis byrjun", "Sigur Rós- Ágætis byrjun"}},
-		{name: "Who?", first: "Who", wants: []string{"Who", "Who-"}, never: []string{""}},
+		{name: "Therapy?", first: "Therapy", wants: []string{"Therapy", "Therapy!"}},
+		{name: "...And You Will Know Us by the Trail of Dead", first: "And You Will Know Us by the Trail of Dead"},
+		{name: "Artist: Subtitle", wants: []string{"Artist - Subtitle", "Artist Subtitle", "Artist- Subtitle"}},
+		{name: "Sigur Rós: Ágætis", wants: []string{"Sigur Ros - Agaetis", "Sigur Ros Agaetis", "Sigur Rós - Ágætis"}},
+		{name: "Who?", first: "Who", wants: []string{"Who", "Who!"}, never: []string{""}},
 		{name: "...", never: []string{"", "...", ".."}},
 		{name: "???", never: []string{"", "???"}},
+		{name: "한글"}, // no combining marks: NFD must not produce a decomposed copy
+		{name: "Dёргать!", first: "Dергать!", wants: []string{"Dергать!"}}, // the diaeresis of ё is a combining mark
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -69,6 +76,9 @@ func TestNameVariants(t *testing.T) {
 					t.Errorf("nameVariants(%q) repeats %q (all: %q)", tc.name, v, got)
 				}
 				seen[v] = true
+				if norm.NFC.String(v) != v {
+					t.Errorf("nameVariants(%q) offers %q, which is not NFC", tc.name, v)
+				}
 			}
 		})
 	}
@@ -81,6 +91,27 @@ func first(items []string) string {
 	return items[0]
 }
 
+func TestLidarrSpelling(t *testing.T) {
+	tests := map[string]string{
+		"Therapy?":          "Therapy!",
+		"AC/DC":             "AC+DC",
+		"Doom:vs":           "Doom-vs",
+		"Artist: Subtitle":  "Artist - Subtitle",
+		"...And You Will":   "And You Will",
+		"Boney M.":          "Boney M",
+		"P.O.D.":            "P.O.D",
+		`Say "Hi" <now>|*`:  "Say Hi now-",
+		"a  b--c . d":       "a b-c . d",
+		"Metallica":         "Metallica",
+		"  leading spaces ": "leading spaces",
+	}
+	for in, want := range tests {
+		if got := lidarrSpelling(in); got != want {
+			t.Errorf("lidarrSpelling(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestStripDiacritics(t *testing.T) {
 	tests := map[string]string{
 		"Mötley Crüe":    "Motley Crue",
@@ -91,6 +122,7 @@ func TestStripDiacritics(t *testing.T) {
 		"Straße":         "Strasse",
 		"Ólafur Arnalds": "Olafur Arnalds",
 		"Dёргать!":       "Dергать!", // Cyrillic io decomposes to ie + diaeresis; the Latin D stays
+		"한글":             "한글",       // decomposes into jamo and must come back composed
 		"Metallica":      "Metallica",
 		"":               "",
 	}
@@ -104,7 +136,9 @@ func TestStripDiacritics(t *testing.T) {
 func TestFindMatchingDir(t *testing.T) {
 	allowLogging(t)
 	parent := t.TempDir()
-	for _, dir := range []string{"ACDC", "AC-DC", "Boney M", "Doom-vs", "Motley Crue", "P.O.D", "W.A.S.P", "metallica", "Slayer"} {
+	dirs := []string{"ACDC", "AC-DC", "Boney M", "Doom-vs", "Motley Crue", "P.O.D", "W.A.S.P", "metallica", "Slayer", "Therapy!"}
+	dirs = append(dirs, norm.NFD.String("Die Ärzte")) // a folder created on macOS
+	for _, dir := range dirs {
 		if err := os.Mkdir(filepath.Join(parent, dir), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -126,6 +160,8 @@ func TestFindMatchingDir(t *testing.T) {
 		{artist: "Mötley Crüe", want: "Motley Crue"},
 		{artist: "P.O.D.", want: "P.O.D"},
 		{artist: "W.A.S.P.", want: "W.A.S.P"},
+		{artist: "Therapy?", want: "Therapy!"},
+		{artist: "Die Ärzte", want: norm.NFD.String("Die Ärzte")}, // NFC name, NFD folder
 		{artist: "Iron Maiden"},
 		{artist: "Megadeth"},
 		{artist: "Pöd"}, // "Pod" is not a directory; "P.O.D" must not be matched by accident
@@ -147,5 +183,70 @@ func TestFindMatchingDir(t *testing.T) {
 
 	if _, ok := findMatchingDir(filepath.Join(parent, "does-not-exist"), "Metallica"); ok {
 		t.Fatal("findMatchingDir on a missing parent must not match")
+	}
+}
+
+// writeNFO creates <parent>/<dir>/artist.nfo with the given name and MBID (either may be empty).
+func writeNFO(t *testing.T, parent, dir, name, mbid string) string {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(parent, dir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "<artist>\n"
+	if name != "" {
+		body += "  <name>" + name + "</name>\n"
+	}
+	if mbid != "" {
+		body += "  <musicbrainzartistid>" + mbid + "</musicbrainzartistid>\n"
+	}
+	body += "  <biography>text</biography>\n</artist>\n"
+	path := filepath.Join(parent, dir, "artist.nfo")
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestFindNFO(t *testing.T) {
+	allowLogging(t)
+	pdk.PDKMock.On("GetConfig", "subpaths").Return("", false)
+	mount := t.TempDir()
+	libs := []host.Library{{ID: 1, Name: "Music", Path: "/music", MountPoint: mount}}
+	host.LibraryMock.On("GetAllLibraries").Return(libs, nil)
+	t.Cleanup(func() { host.LibraryMock.ExpectedCalls = nil })
+
+	const acdc = "66c662b6-6e2f-4930-8610-912e24c63ed1"
+	const boa = "11111111-1111-1111-1111-111111111111"
+	exact := writeNFO(t, mount, "Metallica", "Metallica", "")
+	renamed := writeNFO(t, mount, "ACDC", "AC/DC", acdc)
+	nameless := writeNFO(t, mount, "Motley Crue", "", "")
+	namesake := writeNFO(t, mount, "BoA", "BoA", boa)
+
+	tests := []struct {
+		artist, mbid string
+		want         string // nfo path, "" for not found
+	}{
+		{artist: "Metallica", want: exact},
+		{artist: "AC/DC", want: renamed},                                // folder spelling, nfo names the artist
+		{artist: "AC/DC", mbid: acdc, want: renamed},                    // same, MBID agrees
+		{artist: "AC/DC", mbid: "22222222-2222-2222-2222-222222222222"}, // MBID contradicts the nfo
+		{artist: "Mötley Crüe", want: nameless},                         // nothing in the nfo contradicts
+		{artist: "BoA", want: namesake},                                 // exact folder, as before
+		{artist: "Bôa"},                                                 // folder spelling matches BoA, nfo says another artist
+		{artist: "Megadeth"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.artist+"/"+tc.mbid, func(t *testing.T) {
+			got, err := findNFO(tc.artist, tc.mbid)
+			if tc.want == "" {
+				if err == nil {
+					t.Fatalf("findNFO(%q, %q) = %q, want not found", tc.artist, tc.mbid, got)
+				}
+				return
+			}
+			if err != nil || got != tc.want {
+				t.Fatalf("findNFO(%q, %q) = %q, %v; want %q", tc.artist, tc.mbid, got, err, tc.want)
+			}
+		})
 	}
 }
