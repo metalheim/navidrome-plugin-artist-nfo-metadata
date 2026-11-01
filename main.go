@@ -10,12 +10,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
 
 	"github.com/google/uuid"
-	"github.com/navidrome/navidrome/plugins/pdk/go/pdk"
 	"github.com/navidrome/navidrome/plugins/pdk/go/host"
 	"github.com/navidrome/navidrome/plugins/pdk/go/metadata"
+	"github.com/navidrome/navidrome/plugins/pdk/go/pdk"
 	"golang.org/x/text/encoding/charmap"
+	"golang.org/x/text/unicode/norm"
 )
 
 var (
@@ -209,19 +211,20 @@ func findNFO(artistName string) (string, error) {
 		}
 
 		nfoPath := filepath.Join(lib.MountPoint, subpath, artistName, "artist.nfo")
-		
+
 		// Check exact match first
 		if fi, err := os.Stat(nfoPath); err == nil && !fi.IsDir() {
 			pdk.Log(pdk.LogDebug, fmt.Sprintf("  artist.nfo found at (exact): %s", nfoPath))
 			return nfoPath, nil
-		}else if err != nil {
+		} else if err != nil {
 			// This is the key diagnostic: why did stat fail?
 			pdk.Log(pdk.LogDebug, fmt.Sprintf("  stat failed for %s: %v", nfoPath, err))
 		} else if fi != nil && fi.IsDir() {
 			pdk.Log(pdk.LogDebug, fmt.Sprintf("  path exists but is a directory (expected file): %q", nfoPath))
 		}
 
-		// Probe parent dir for subfolders (case-insensitive search)
+		// Probe parent dir for subfolders (case-insensitive search, then the
+		// filesystem-safe spellings of the name, see nameVariants)
 		parent := filepath.Join(lib.MountPoint, subpath)
 		artistDir, ok := findMatchingDir(parent, artistName)
 		if !ok {
@@ -246,13 +249,31 @@ func findNFO(artistName string) (string, error) {
 }
 
 // findMatchingDir returns the actual directory path under parent whose name
-// matches wantedName case-insensitively. If none found, returns ("", false).
+// matches wantedName case-insensitively. When no directory matches, the
+// filesystem-safe spellings from nameVariants are tried in order, so an artist
+// "AC/DC" is found in "ACDC" and "Mötley Crüe" in "Motley Crue". If none found,
+// returns ("", false).
 func findMatchingDir(parent, wantedName string) (string, bool) {
 	entries, err := os.ReadDir(parent)
 	if err != nil {
 		pdk.Log(pdk.LogDebug, fmt.Sprintf("  failed to read dir %q: %v", parent, err))
 		return "", false
 	}
+	if dir, ok := matchDir(parent, entries, wantedName); ok {
+		return dir, true
+	}
+	for _, variant := range nameVariants(wantedName) {
+		if dir, ok := matchDir(parent, entries, variant); ok {
+			pdk.Log(pdk.LogDebug, fmt.Sprintf("  artist dir for %q matched through filesystem-safe spelling %q", wantedName, variant))
+			return dir, true
+		}
+	}
+	return "", false
+}
+
+// matchDir returns the directory among entries whose name equals wantedName
+// case-insensitively.
+func matchDir(parent string, entries []os.DirEntry, wantedName string) (string, bool) {
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
@@ -262,6 +283,101 @@ func findMatchingDir(parent, wantedName string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// illegalFolderChars are the characters most taggers and download clients
+// (Windows file names, Lidarr, MusicBrainz Picard, beets) drop or replace when
+// they create an artist folder.
+const illegalFolderChars = `/\:*?"<>|`
+
+// illegalReplacements are the usual stand-ins for an illegal character, tried
+// in this order (after plain removal).
+var illegalReplacements = []string{"-", "_", "+", " "}
+
+// asciiFold maps letters that have no canonical decomposition to their usual
+// ASCII spelling.
+var asciiFold = map[rune]string{
+	'ß': "ss", 'ẞ': "SS",
+	'æ': "ae", 'Æ': "AE",
+	'œ': "oe", 'Œ': "OE",
+	'ø': "o", 'Ø': "O",
+	'đ': "d", 'Đ': "D",
+	'ð': "d", 'Ð': "D",
+	'þ': "th", 'Þ': "Th",
+	'ł': "l", 'Ł': "L",
+	'ı': "i",
+}
+
+// nameVariants lists the spellings a folder for artistName may have on a
+// filesystem, without the original: trailing dots and spaces removed (Windows
+// forbids them, "Boney M." becomes "Boney M"), illegal characters removed or
+// replaced ("AC/DC" becomes "ACDC" or "AC-DC", "Doom:vs" becomes "Doom-vs"),
+// diacritics stripped ("Mötley Crüe" becomes "Motley Crue"), and the
+// combinations of these. Least invasive variants come first; callers compare
+// case-insensitively, so no case variants are produced.
+func nameVariants(artistName string) []string {
+	var variants []string
+	seen := map[string]bool{strings.ToLower(artistName): true}
+	add := func(candidate string) {
+		candidate = strings.TrimRight(strings.TrimSpace(candidate), ". ")
+		key := strings.ToLower(candidate)
+		if candidate == "" || seen[key] {
+			return
+		}
+		seen[key] = true
+		variants = append(variants, candidate)
+	}
+
+	for _, base := range []string{artistName, stripDiacritics(artistName)} {
+		add(base)
+		add(removeChars(base, illegalFolderChars))
+		for _, replacement := range illegalReplacements {
+			add(replaceChars(base, illegalFolderChars, replacement))
+		}
+		add(collapseSpaces(replaceChars(base, illegalFolderChars, " ")))
+	}
+	return variants
+}
+
+// stripDiacritics removes combining marks after canonical decomposition and
+// folds the letters in asciiFold, so "Mötley Crüe" becomes "Motley Crue" and
+// "Sólstafir" becomes "Solstafir".
+func stripDiacritics(s string) string {
+	var b strings.Builder
+	for _, r := range norm.NFD.String(s) {
+		if unicode.Is(unicode.Mn, r) {
+			continue
+		}
+		if folded, ok := asciiFold[r]; ok {
+			b.WriteString(folded)
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// removeChars deletes every rune of chars from s.
+func removeChars(s, chars string) string {
+	return replaceChars(s, chars, "")
+}
+
+// replaceChars replaces every rune of chars in s with replacement.
+func replaceChars(s, chars, replacement string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if strings.ContainsRune(chars, r) {
+			b.WriteString(replacement)
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// collapseSpaces squeezes runs of whitespace into one space and trims the ends.
+func collapseSpaces(s string) string {
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // readArtistNFO parses the artist.nfo and returns the artistNFO struct.
