@@ -10,12 +10,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
 
 	"github.com/google/uuid"
-	"github.com/navidrome/navidrome/plugins/pdk/go/pdk"
 	"github.com/navidrome/navidrome/plugins/pdk/go/host"
 	"github.com/navidrome/navidrome/plugins/pdk/go/metadata"
+	"github.com/navidrome/navidrome/plugins/pdk/go/pdk"
 	"golang.org/x/text/encoding/charmap"
+	"golang.org/x/text/unicode/norm"
 )
 
 var (
@@ -53,7 +55,7 @@ func (p *plugin) GetArtistBiography(input metadata.ArtistRequest) (*metadata.Art
 		return nil, errors.New("  empty artist name")
 	}
 
-	nfoPath, err := findNFO(input.Name)
+	nfoPath, err := findNFO(input.Name, input.MBID)
 	if err != nil {
 		pdk.Log(pdk.LogDebug, fmt.Sprintf("  artist.nfo file not found for artist %s: %v", input.Name, err))
 		return nil, fmt.Errorf("  artist.nfo file not found for artist %s", input.Name)
@@ -81,7 +83,7 @@ func (p *plugin) GetArtistURL(input metadata.ArtistRequest) (*metadata.ArtistURL
 		return nil, errors.New("  empty artist name")
 	}
 
-	nfoPath, err := findNFO(input.Name)
+	nfoPath, err := findNFO(input.Name, input.MBID)
 	if err != nil {
 		pdk.Log(pdk.LogDebug, fmt.Sprintf("  artist.nfo file not found for artist %s: %v", input.Name, err))
 		return nil, fmt.Errorf("  artist.nfo file not found for artist %s", input.Name)
@@ -115,7 +117,7 @@ func (p *plugin) GetArtistMBID(input metadata.ArtistMBIDRequest) (*metadata.Arti
 		return nil, errors.New("  empty artist name")
 	}
 
-	nfoPath, err := findNFO(input.Name)
+	nfoPath, err := findNFO(input.Name, "")
 	if err != nil {
 		pdk.Log(pdk.LogDebug, fmt.Sprintf("  artist.nfo file not found for artist %s: %v", input.Name, err))
 		return nil, fmt.Errorf("  artist.nfo file not found for artist %s", input.Name)
@@ -148,7 +150,7 @@ func (p *plugin) GetArtistImages(input metadata.ArtistRequest) (*metadata.Artist
 		return nil, errors.New("  empty artist name")
 	}
 
-	nfoPath, err := findNFO(input.Name)
+	nfoPath, err := findNFO(input.Name, input.MBID)
 	if err != nil {
 		pdk.Log(pdk.LogDebug, fmt.Sprintf("  artist.nfo file not found for artist %s: %v", input.Name, err))
 		return nil, fmt.Errorf("  artist.nfo file not found for artist %s", input.Name)
@@ -182,9 +184,14 @@ func (p *plugin) GetArtistImages(input metadata.ArtistRequest) (*metadata.Artist
 }
 
 // findNFO searches configured libraries and returns the first existing artist.nfo path.
-// It applies the per-library subpath config if present and only checks the exact path:
-// <mountPoint>[/subpath]/<artistName>/artist.nfo
-func findNFO(artistName string) (string, error) {
+// It applies the per-library subpath config if present and checks, in this order:
+// the exact path <mountPoint>[/subpath]/<artistName>/artist.nfo, a directory whose
+// name matches case-insensitively, and a directory named with a filesystem-safe
+// spelling of the name (see nameVariants). A match through a spelling is only
+// accepted when the nfo does not contradict it: its <name> (if any) must be the
+// artist's name and its <musicbrainzartistid> (if any) must equal mbid when both
+// are known.
+func findNFO(artistName, mbid string) (string, error) {
 	libraries, err := host.LibraryGetAllLibraries()
 	if err != nil {
 		pdk.Log(pdk.LogDebug, fmt.Sprintf("  failed to get libraries: %v", err))
@@ -209,19 +216,20 @@ func findNFO(artistName string) (string, error) {
 		}
 
 		nfoPath := filepath.Join(lib.MountPoint, subpath, artistName, "artist.nfo")
-		
+
 		// Check exact match first
 		if fi, err := os.Stat(nfoPath); err == nil && !fi.IsDir() {
 			pdk.Log(pdk.LogDebug, fmt.Sprintf("  artist.nfo found at (exact): %s", nfoPath))
 			return nfoPath, nil
-		}else if err != nil {
+		} else if err != nil {
 			// This is the key diagnostic: why did stat fail?
 			pdk.Log(pdk.LogDebug, fmt.Sprintf("  stat failed for %s: %v", nfoPath, err))
 		} else if fi != nil && fi.IsDir() {
 			pdk.Log(pdk.LogDebug, fmt.Sprintf("  path exists but is a directory (expected file): %q", nfoPath))
 		}
 
-		// Probe parent dir for subfolders (case-insensitive search)
+		// Probe parent dir for subfolders (case-insensitive search, then the
+		// filesystem-safe spellings of the name, see nameVariants)
 		parent := filepath.Join(lib.MountPoint, subpath)
 		artistDir, ok := findMatchingDir(parent, artistName)
 		if !ok {
@@ -233,7 +241,11 @@ func findNFO(artistName string) (string, error) {
 		nfoPath = filepath.Join(artistDir, "artist.nfo")
 		pdk.Log(pdk.LogTrace, fmt.Sprintf("  Probing nfo at: %s", nfoPath))
 		if fi, err := os.Stat(nfoPath); err == nil && !fi.IsDir() {
-			pdk.Log(pdk.LogDebug, fmt.Sprintf("  artist.nfo found at (case-insensitive): %s", nfoPath))
+			if !sameName(filepath.Base(artistDir), artistName) && !nfoBelongsTo(nfoPath, artistName, mbid) {
+				pdk.Log(pdk.LogInfo, fmt.Sprintf("  %s is named like a spelling of %q but its artist.nfo describes another artist, ignored", artistDir, artistName))
+				continue
+			}
+			pdk.Log(pdk.LogDebug, fmt.Sprintf("  artist.nfo found at (directory match): %s", nfoPath))
 			return nfoPath, nil
 		}
 
@@ -246,22 +258,213 @@ func findNFO(artistName string) (string, error) {
 }
 
 // findMatchingDir returns the actual directory path under parent whose name
-// matches wantedName case-insensitively. If none found, returns ("", false).
+// matches wantedName case-insensitively (after NFC normalisation of both, so a
+// folder created on macOS matches a name tagged on Linux). When no directory
+// matches, the filesystem-safe spellings from nameVariants are tried in order, so
+// an artist "AC/DC" is found in "ACDC" and "Mötley Crüe" in "Motley Crue". If
+// none found, returns ("", false).
 func findMatchingDir(parent, wantedName string) (string, bool) {
 	entries, err := os.ReadDir(parent)
 	if err != nil {
 		pdk.Log(pdk.LogDebug, fmt.Sprintf("  failed to read dir %q: %v", parent, err))
 		return "", false
 	}
+	if dir, ok := matchDir(parent, entries, wantedName); ok {
+		return dir, true
+	}
+	for _, variant := range nameVariants(wantedName) {
+		if dir, ok := matchDir(parent, entries, variant); ok {
+			pdk.Log(pdk.LogInfo, fmt.Sprintf("  artist dir for %q matched through filesystem-safe spelling %q", wantedName, variant))
+			return dir, true
+		}
+	}
+	return "", false
+}
+
+// matchDir returns the directory among entries whose name is wantedName
+// (see sameName).
+func matchDir(parent string, entries []os.DirEntry, wantedName string) (string, bool) {
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
 		}
-		if strings.EqualFold(e.Name(), wantedName) {
+		if sameName(e.Name(), wantedName) {
 			return filepath.Join(parent, e.Name()), true
 		}
 	}
 	return "", false
+}
+
+// sameName compares two names case-insensitively after NFC normalisation.
+func sameName(a, b string) bool {
+	return strings.EqualFold(norm.NFC.String(a), norm.NFC.String(b))
+}
+
+// nfoBelongsTo reports whether the artist.nfo at nfoPath can describe the
+// artist: its <name>, when present, must be artistName, and its
+// <musicbrainzartistid>, when present and when mbid is known, must be mbid. An
+// unreadable file is not a match.
+func nfoBelongsTo(nfoPath, artistName, mbid string) bool {
+	nfo, ok := readArtistNFO(nfoPath)
+	if !ok {
+		return false
+	}
+	if name := strings.TrimSpace(nfo.Name); name != "" && !sameName(name, artistName) {
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("  %s names %q, not %q", nfoPath, name, artistName))
+		return false
+	}
+	nfoMBID := strings.TrimSpace(nfo.MusicBrainzArtistID)
+	if mbid != "" && nfoMBID != "" && !strings.EqualFold(nfoMBID, mbid) {
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("  %s carries MBID %s, the artist has %s", nfoPath, nfoMBID, mbid))
+		return false
+	}
+	return true
+}
+
+// illegalFolderChars are the characters a folder name cannot or should not
+// contain on Windows and SMB shares; taggers and download clients drop or
+// replace them when they create an artist folder.
+const illegalFolderChars = `/\:*?"<>|`
+
+// illegalReplacements are the usual stand-ins for an illegal character, tried
+// in this order (after plain removal).
+var illegalReplacements = []string{"-", "_", "+", " "}
+
+// lidarrReplacements is Lidarr's CleanFileName table with "Replace Illegal
+// Characters" on: ? to !, * to -, / and \ to +, the rest deleted. The colon is
+// handled by lidarrSpelling first.
+var lidarrReplacements = map[rune]string{'?': "!", '*': "-", '/': "+", '\\': "+", '<': "", '>': "", '|': "", '"': ""}
+
+// asciiFold maps letters that have no canonical decomposition to their usual
+// ASCII spelling.
+var asciiFold = map[rune]string{
+	'ß': "ss", 'ẞ': "SS",
+	'æ': "ae", 'Æ': "AE",
+	'œ': "oe", 'Œ': "OE",
+	'ø': "o", 'Ø': "O",
+	'đ': "d", 'Đ': "D",
+	'ð': "d", 'Ð': "D",
+	'þ': "th", 'Þ': "Th",
+	'ł': "l", 'Ł': "L",
+	'ı': "i",
+}
+
+// nameVariants lists the spellings a folder for artistName may have on a
+// filesystem, without the original: trailing dots and spaces removed (Windows
+// forbids them, "Boney M." becomes "Boney M"), leading dots and spaces removed
+// ("...And You Will Know Us by the Trail of Dead"), illegal characters removed
+// or replaced ("AC/DC" becomes "ACDC" or "AC-DC", "Doom:vs" becomes "Doom-vs"),
+// Lidarr's own replacement table ("Therapy?" becomes "Therapy!"), diacritics
+// stripped ("Mötley Crüe" becomes "Motley Crue"), and the combinations of these.
+// Least invasive variants come first; callers compare case-insensitively, so no
+// case variants are produced.
+func nameVariants(artistName string) []string {
+	var variants []string
+	seen := map[string]bool{strings.ToLower(norm.NFC.String(artistName)): true}
+	add := func(candidate string) {
+		candidate = strings.TrimRight(strings.TrimSpace(candidate), ". ")
+		key := strings.ToLower(norm.NFC.String(candidate))
+		if candidate == "" || seen[key] {
+			return
+		}
+		seen[key] = true
+		variants = append(variants, candidate)
+	}
+
+	for _, base := range []string{artistName, stripDiacritics(artistName)} {
+		add(base)
+		add(strings.TrimLeft(base, ". "))
+		add(removeChars(base, illegalFolderChars))
+		add(lidarrSpelling(base))
+		for _, replacement := range illegalReplacements {
+			add(replaceChars(base, illegalFolderChars, replacement))
+		}
+		add(collapseSpaces(replaceChars(base, illegalFolderChars, " ")))
+	}
+	return variants
+}
+
+// lidarrSpelling is the artist folder name Lidarr builds with its default
+// naming settings ("{Artist Name}", "Replace Illegal Characters" on, colon
+// replacement "Smart"): FileNameBuilder.CleanFileName turns ": " into " - " and
+// ":" into "-" and applies the lidarrReplacements table, then CleanFolderName
+// squeezes a run of one separator (space, "-", ".", "_") to a single one and
+// trims spaces and dots at both ends.
+func lidarrSpelling(s string) string {
+	s = strings.ReplaceAll(s, ": ", " - ")
+	s = strings.ReplaceAll(s, ":", "-")
+	return strings.Trim(collapseSeparatorRuns(mapRunes(s, lidarrReplacements)), " .")
+}
+
+// mapRunes replaces every rune found in table with its entry (an empty entry
+// deletes the rune) and keeps the others.
+func mapRunes(s string, table map[rune]string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if replacement, ok := table[r]; ok {
+			b.WriteString(replacement)
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// collapseSeparatorRuns keeps one of every run of the same separator rune
+// (space, "-", ".", "_"), like Lidarr's FileNameCleanupRegex.
+func collapseSeparatorRuns(s string) string {
+	var b strings.Builder
+	var last rune = -1
+	for _, r := range s {
+		if r == last && strings.ContainsRune("- ._", r) {
+			continue
+		}
+		b.WriteRune(r)
+		last = r
+	}
+	return b.String()
+}
+
+// stripDiacritics removes combining marks after canonical decomposition and
+// folds the letters in asciiFold, so "Mötley Crüe" becomes "Motley Crue" and
+// "Sólstafir" becomes "Solstafir". The result is NFC again, so a name without
+// marks comes back unchanged.
+func stripDiacritics(s string) string {
+	var b strings.Builder
+	for _, r := range norm.NFD.String(s) {
+		if unicode.Is(unicode.Mn, r) {
+			continue
+		}
+		if folded, ok := asciiFold[r]; ok {
+			b.WriteString(folded)
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return norm.NFC.String(b.String())
+}
+
+// removeChars deletes every rune of chars from s.
+func removeChars(s, chars string) string {
+	return replaceChars(s, chars, "")
+}
+
+// replaceChars replaces every rune of chars in s with replacement.
+func replaceChars(s, chars, replacement string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if strings.ContainsRune(chars, r) {
+			b.WriteString(replacement)
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// collapseSpaces squeezes runs of whitespace into one space and trims the ends.
+func collapseSpaces(s string) string {
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // readArtistNFO parses the artist.nfo and returns the artistNFO struct.
